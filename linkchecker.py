@@ -64,6 +64,8 @@ def extract_links_from_entry_container(page_url):
                 continue
             if "?share=x" in href:
                 continue
+            if "anxietyexit.com" in href:
+                continue
             if any(href.lower().endswith(ext) for ext in EXCLUDED_EXTENSIONS):
                 continue
 
