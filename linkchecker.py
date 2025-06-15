@@ -3,11 +3,14 @@ import time
 import os
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-SITEMAP_INDEX = "https://example.com/sitemap_index.xml"
+MAX_EXTERNAL_THREADS = 5  # Number of external links to check at once
+
+SITEMAP_INDEX = "https://theanxietyguy.com/sitemap_index.xml"
 OUTPUT_FILE = "broken_links_report.txt"
 PROGRESS_FILE = "progress.txt"
-WAIT_BETWEEN_PAGES = 10
+WAIT_BETWEEN_PAGES = 5
 CHECK_INTERNAL_LINKS = False
 CHECK_EXTERNAL_LINKS = True
 
@@ -146,28 +149,58 @@ def main():
         links = extract_links_from_entry_container(page_url)
         print(f"    → Found {len(links)} links in .entry-container content.")
 
+        internal_links = []
+        external_links = []
+
         for link in links:
-            source = "Internal" if is_internal(link) else "External"
+            if is_internal(link):
+                if CHECK_INTERNAL_LINKS:
+                    internal_links.append(link)
+                else:
+                    print(f"     ↳ Skipping Internal link → {link}")
+            else:
+                if CHECK_EXTERNAL_LINKS:
+                    external_links.append(link)
+                else:
+                    print(f"     ↳ Skipping External link → {link}")
 
-            if (source == "Internal" and not CHECK_INTERNAL_LINKS) or (source == "External" and not CHECK_EXTERNAL_LINKS):
-                print(f"     ↳ Skipping {source} link → {link}")
-                continue
-
-            print(f"     ↳ Checking {source} link → {link}")
+        # Check internal links one-by-one
+        for link in internal_links:
+            print(f"     ↳ Checking Internal link → {link}")
+            time.sleep(INTERNAL_DELAY)
             status = check_link(link)
-
 
             if status == 200:
                 print(f"        ✓ {status} OK")
             elif status:
                 print(f"        ✗ {status} Issue")
-                log_broken_link(page_url, link, status, source)
+                log_broken_link(page_url, link, status, "Internal")
             else:
                 print(f"        ✗ No response")
-                log_broken_link(page_url, link, "No response", source)
+                log_broken_link(page_url, link, "No response", "Internal")
 
-            delay = INTERNAL_DELAY if source == "Internal" else EXTERNAL_DELAY
-            time.sleep(delay)
+        # Check external links with multithreading
+        with ThreadPoolExecutor(max_workers=MAX_EXTERNAL_THREADS) as executor:
+            future_to_link = {executor.submit(check_link, link): link for link in external_links}
+            for future in as_completed(future_to_link):
+                link = future_to_link[future]
+                try:
+                    status = future.result()
+                except Exception:
+                    status = None
+
+                print(f"     ↳ Checked External link → {link}")
+                if status == 200:
+                    print(f"        ✓ {status} OK")
+                elif status:
+                    print(f"        ✗ {status} Issue")
+                    log_broken_link(page_url, link, status, "External")
+                else:
+                    print(f"        ✗ No response")
+                    log_broken_link(page_url, link, "No response", "External")
+
+
+            #delay = INTERNAL_DELAY if source == "Internal" else EXTERNAL_DELAY
 
         save_progress(page_url)
         print(f"    ✔ Done scanning page. Waiting {WAIT_BETWEEN_PAGES} seconds...\n")
