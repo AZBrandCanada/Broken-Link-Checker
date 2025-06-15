@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 MAX_EXTERNAL_THREADS = 5  # Number of external links to check at once
 
-SITEMAP_INDEX = "https://theanxietyguy.com/sitemap_index.xml"
+SITEMAP_INDEX = "https://example.com/sitemap_index.xml"
 OUTPUT_FILE = "broken_links_report.txt"
 PROGRESS_FILE = "progress.txt"
 WAIT_BETWEEN_PAGES = 5
